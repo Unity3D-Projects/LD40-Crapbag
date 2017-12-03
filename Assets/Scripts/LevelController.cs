@@ -9,11 +9,20 @@ public class LevelController : MonoBehaviour
     public int endRow, endCol;
 
     public GameObject cellPrefab;
-
     public Transform[] heartsObjs;
+    public GameObject finishPanel;
 
     public Sprite emptyHeart;
     public Sprite fillHeart;
+
+    public AudioClip finishAudioClip;
+    public AudioClip hurtAudioClip;
+    public AudioClip moveAudioClip;
+    public AudioClip notFinishAudioClip;
+    public AudioClip pickupAudioClip;
+    public AudioClip rewindAudioClip;
+
+    private AudioSource _audioSource;
 
     private Level[] _levels;
     private int _currentLevel;
@@ -30,6 +39,8 @@ public class LevelController : MonoBehaviour
     {
         _levels = GetLevels();
         _currentLevel = 0;
+
+        _audioSource = GameObject.FindObjectOfType<AudioSource>();
 
         InitLevel();
     }
@@ -62,7 +73,7 @@ public class LevelController : MonoBehaviour
         _cells = new CellController[rows, cols];
         _hearts = 0;
 
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < heartsObjs.Length; i++)
         {
             var image = heartsObjs[i].GetComponent<Image>();
             image.sprite = emptyHeart;
@@ -98,12 +109,27 @@ public class LevelController : MonoBehaviour
 
         var camera = Camera.main;
         camera.transform.position = new Vector3(cols * 0.5f - 0.5f, rows * 0.5f - 0.5f, -10.0f);
+        if (rows >= 7 && cols >= 7)
+        {
+            camera.orthographicSize = 4;
+        }
+        else if (rows >= 6 && cols >= 6)
+        {
+            camera.orthographicSize = 3.5f;
+        }
     }
 
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            Application.Quit();
+            return;
+        }
+
         if (_finished)
         {
+            finishPanel.SetActive(true);
             return;
         }
 
@@ -147,12 +173,12 @@ public class LevelController : MonoBehaviour
         {
             if (_lastDir != null && _lastDir == Position.Inverse(dir))
             {
+                PlaySound(rewindAudioClip);
                 PopState();
                 return;
             }
 
             var newCell = _cells[newPosition.r, newPosition.c];
-            Debug.Log(newCell.type);
             switch (newCell.type)
             {
                 case CellType.Empty:
@@ -168,6 +194,8 @@ public class LevelController : MonoBehaviour
                     newCell.changed = true;
 
                     _lastDir = dir;
+
+                    PlaySound(moveAudioClip);
                     break;
                 }
                 case CellType.Heart:
@@ -179,7 +207,7 @@ public class LevelController : MonoBehaviour
 
                     _position = newPosition;
                     CollectHeart();
-                    
+
                     newCell.type = CellType.Player;
                     newCell.changed = true;
 
@@ -187,7 +215,7 @@ public class LevelController : MonoBehaviour
                     if (IsInside(monsterPos))
                     {
                         var monsterCell = _cells[monsterPos.r, monsterPos.c];
-                        if (monsterCell.type == CellType.Empty)
+                        if (monsterCell.type == CellType.Empty || monsterCell.type == CellType.Heart)
                         {
                             monsterCell.type = CellType.Monster;
                             monsterCell.changed = true;
@@ -195,6 +223,7 @@ public class LevelController : MonoBehaviour
                     }
 
                     _lastDir = dir;
+                    PlaySound(pickupAudioClip);
                     break;
                 }
                 case CellType.Monster:
@@ -211,6 +240,7 @@ public class LevelController : MonoBehaviour
                     newCell.changed = true;
 
                     _lastDir = dir;
+                    PlaySound(hurtAudioClip);
                     break;
                 }
                 case CellType.End:
@@ -227,9 +257,12 @@ public class LevelController : MonoBehaviour
 
                     _lastDir = dir;
 
+
                     var level = _levels[_currentLevel];
                     if (_hearts == level.hearts)
                     {
+                        PlaySound(finishAudioClip);
+
                         _currentLevel++;
                         if (_currentLevel >= _levels.Length)
                         {
@@ -238,6 +271,10 @@ public class LevelController : MonoBehaviour
                         }
 
                         InitLevel();
+                    }
+                    else
+                    {
+                        PlaySound(notFinishAudioClip);
                     }
                     break;
                 }
@@ -249,16 +286,22 @@ public class LevelController : MonoBehaviour
     {
         _hearts++;
 
-        var image = heartsObjs[_hearts - 1].GetComponent<Image>();
-        image.sprite = fillHeart;
+        if (_hearts > 0 && _hearts <= heartsObjs.Length)
+        {
+            var image = heartsObjs[_hearts - 1].GetComponent<Image>();
+            image.sprite = fillHeart;
+        }
     }
 
     void RemoveCollectedHeart()
     {
         _hearts--;
 
-        var image = heartsObjs[_hearts].GetComponent<Image>();
-        image.sprite = emptyHeart;
+        if (_hearts >= 0 && _hearts < heartsObjs.Length)
+        {
+            var image = heartsObjs[_hearts].GetComponent<Image>();
+            image.sprite = emptyHeart;
+        }
     }
 
     void SetCurrentCellPath(CellController cell, Position dir)
@@ -332,6 +375,17 @@ public class LevelController : MonoBehaviour
         }
     }
 
+    void PlaySound(AudioClip clip)
+    {
+        if (_audioSource.isPlaying)
+        {
+            _audioSource.Stop();
+        }
+
+        _audioSource.clip = clip;
+        _audioSource.Play();
+    }
+
     void PushState()
     {
         var state = new GameState()
@@ -371,7 +425,7 @@ public class LevelController : MonoBehaviour
             _position = state.player;
 
             var level = _levels[_currentLevel];
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < heartsObjs.Length; i++)
             {
                 var image = heartsObjs[i].GetComponent<Image>();
                 image.sprite = i < _hearts ? fillHeart : emptyHeart;
@@ -398,9 +452,9 @@ public class LevelController : MonoBehaviour
             {
                 cells = new int[3,3]
                 {
-                    { 10, 0, 0 },
-                    { 0, 8, 0 },
-                    { 0, 0, 12 },
+                    { 10, 0,  0 },
+                    {  0, 8,  0 },
+                    {  0, 0, 12 },
                 },
                 hearts = 1
             },
@@ -408,10 +462,10 @@ public class LevelController : MonoBehaviour
             {
                 cells = new int[4, 4]
                 {
-                    { 10, 0, 0, 0 },
-                    { 0, 0, 0, 0 },
-                    { 0, 8, 0, 0 },
-                    { 0, 0, 8, 12 },
+                    { 10, 0, 0,  0 },
+                    {  0, 0, 0,  0 },
+                    {  0, 8, 0,  0 },
+                    {  0, 0, 8, 12 },
                 },
                 hearts = 2
             },
@@ -419,10 +473,10 @@ public class LevelController : MonoBehaviour
             {
                 cells = new int[4, 4]
                 {
-                    { 0, 10, 0, 0 },
-                    { 0, 0, 0, 8 },
-                    { 0, 8, 0, 0 },
-                    { 0, 0, 8, 12 },
+                    { 10, 0, 0,  0 },
+                    { 0,  0, 0,  8 },
+                    { 0,  8, 0,  0 },
+                    { 0,  0, 8, 12 },
                 },
                 hearts = 3
             },
@@ -430,11 +484,11 @@ public class LevelController : MonoBehaviour
             {
                 cells = new int[5, 5]
                 {
-                    { 10, 0, 0, 0, 0 },
-                    { 0, 0, 0, 0, 0 },
-                    { 0, 8, 0, 8, 0 },
-                    { 0, 0, 0, 0, 0 },
-                    { 0, 8, 0, 8, 12 },
+                    { 10, 0, 0, 0,  0 },
+                    {  0, 0, 0, 0,  0 },
+                    {  0, 8, 0, 8,  0 },
+                    {  0, 0, 0, 0,  0 },
+                    {  0, 8, 0, 8, 12 },
                 },
                 hearts = 4
             },
@@ -454,13 +508,68 @@ public class LevelController : MonoBehaviour
             {
                 cells = new int[5, 5]
                 {
-                    { 10, 0, 8, 0, 0 },
-                    { 0, 0, 0, 8, 0 },
-                    { 0, 8, 0, 0, 8 },
-                    { 0, 0, 0, 0, 0 },
-                    { 0, 0, 8, 0, 12 },
+                    { 10, 0, 0, 0,  0 },
+                    {  0, 0, 8, 0,  8 },
+                    {  0, 8, 0, 0,  8 },
+                    {  0, 0, 0, 0,  0 },
+                    {  0, 0, 8, 0, 12 },
                 },
                 hearts = 4
+            },
+            new Level()
+            {
+                cells = new int[6, 6]
+                {
+                    { 10, 0, 0, 0, 0,  0 },
+                    {  0, 0, 0, 0, 0,  0 },
+                    {  0, 0, 8, 0, 8,  0 },
+                    {  8, 0, 0, 0, 8,  0 },
+                    {  0, 8, 0, 0, 0,  0 },
+                    {  0, 0, 0, 0, 0, 12 },
+                },
+                hearts = 5
+            },
+            new Level()
+            {
+                cells = new int[6, 6]
+                {
+                    { 10, 0, 8, 0, 8,  0 },
+                    {  0, 0, 0, 0, 0,  0 },
+                    {  8, 0, 8, 0, 0,  8 },
+                    {  0, 0, 0, 0, 0,  0 },
+                    {  8, 0, 8, 8, 0,  8 },
+                    {  0, 0, 0, 0, 0, 12 },
+                },
+                hearts = 6
+            },
+            new Level()
+            {
+                cells = new int[7, 7]
+                {
+                    { 10, 0, 0, 0, 0, 8,  0 },
+                    {  0, 0, 0, 0, 0, 0,  0 },
+                    {  0, 0, 0, 8, 0, 8,  0 },
+                    {  8, 0, 0, 8, 0, 0,  0 },
+                    {  0, 0, 8, 0, 8, 0,  0 },
+                    {  8, 0, 0, 0, 0, 0,  0 },
+                    {  0, 0, 0, 8, 0, 0, 12 },
+                },
+                hearts = 7
+            },
+            new Level()
+            {
+                cells = new int[8, 8]
+                {
+                    { 10, 0, 0, 0, 0, 0, 0,  0 },
+                    {  0, 8, 0, 8, 0, 8, 0,  8 },
+                    {  0, 0, 0, 0, 0, 0, 0,  0 },
+                    {  8, 0, 8, 0, 8, 0, 8,  0 },
+                    {  0, 0, 0, 0, 0, 0, 0,  0 },
+                    {  0, 8, 0, 8, 0, 8, 0,  8 },
+                    {  0, 0, 0, 0, 0, 0, 0,  0 },
+                    {  8, 0, 8, 0, 8, 0, 8, 12 },
+                },
+                hearts = 10
             }
         };
     }
