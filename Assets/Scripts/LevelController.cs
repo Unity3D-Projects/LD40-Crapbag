@@ -178,11 +178,8 @@ public class LevelController : MonoBehaviour
                     currentCell.changed = true;
 
                     _position = newPosition;
-                    _hearts++;
-
-                    var image = heartsObjs[_hearts - 1].GetComponent<Image>();
-                    image.sprite = fillHeart;
-
+                    CollectHeart();
+                    
                     newCell.type = CellType.Player;
                     newCell.changed = true;
 
@@ -208,8 +205,7 @@ public class LevelController : MonoBehaviour
                     currentCell.changed = true;
 
                     _position = newPosition;
-                    _hearts--;
-                    Debug.Log("Lives: " + _hearts);
+                    RemoveCollectedHeart();
 
                     newCell.type = CellType.Player;
                     newCell.changed = true;
@@ -247,6 +243,22 @@ public class LevelController : MonoBehaviour
                 }
             }
         }
+    }
+
+    void CollectHeart()
+    {
+        _hearts++;
+
+        var image = heartsObjs[_hearts - 1].GetComponent<Image>();
+        image.sprite = fillHeart;
+    }
+
+    void RemoveCollectedHeart()
+    {
+        _hearts--;
+
+        var image = heartsObjs[_hearts].GetComponent<Image>();
+        image.sprite = emptyHeart;
     }
 
     void SetCurrentCellPath(CellController cell, Position dir)
